@@ -22,10 +22,16 @@ import { Emitter, Event } from '@theia/core/lib/common/event';
 import { CommandRegistry, Command } from '@theia/core/lib/common/command';
 import { ReactWidget } from '@theia/core/lib/browser/widgets/react-widget';
 import {
-    KeybindingRegistry, SingleTextInputDialog, KeySequence, ConfirmDialog, Message, KeybindingScope, SingleTextInputDialogProps, Key, ScopedKeybinding
+    ConfirmDialog,
+    ContextMenuRenderer,
+    Key, KeySequence, KeybindingRegistry, KeybindingScope,
+    Message,
+    ScopedKeybinding,
+    SingleTextInputDialog, SingleTextInputDialogProps
 } from '@theia/core/lib/browser';
 import { KeymapsService } from './keymaps-service';
 import { AlertMessage } from '@theia/core/lib/browser/widgets/alert-message';
+import { KeymapsMenus } from './keymaps-menus';
 
 /**
  * Representation of a keybinding item for the view.
@@ -62,6 +68,9 @@ export class KeybindingWidget extends ReactWidget {
 
     @inject(CommandRegistry)
     protected readonly commandRegistry: CommandRegistry;
+
+    @inject(ContextMenuRenderer)
+    protected readonly contextMenuRenderer: ContextMenuRenderer;
 
     @inject(KeybindingRegistry)
     protected readonly keybindingRegistry: KeybindingRegistry;
@@ -350,7 +359,11 @@ export class KeybindingWidget extends ReactWidget {
     protected renderRow(item: KeybindingItem, index: number): React.ReactNode {
         const { command, keybinding } = item;
         // TODO get rid of array functions in event handlers
-        return <tr className='kb-item-row' key={index} onDoubleClick={() => this.editKeybinding(item)}>
+        return <tr
+            className='kb-item-row'
+            key={index}
+            onDoubleClick={this.editKeybinding(item)}
+            onContextMenu={this.handleContextMenu(item)}>
             <td className='kb-actions'>
                 {this.renderActions(item)}
             </td>
@@ -382,7 +395,7 @@ export class KeybindingWidget extends ReactWidget {
      * @param item the keybinding item for the row.
      */
     protected renderEdit(item: KeybindingItem): React.ReactNode {
-        return <a title='Edit Keybinding' href='#' onClick={a => this.editKeybinding(item)}><i className='fa fa-pencil kb-action-item'></i></a>;
+        return <a title='Edit Keybinding' href='#' onClick={this.editKeybinding(item)}><i className='fa fa-pencil kb-action-item'></i></a>;
     }
 
     /**
@@ -538,11 +551,19 @@ export class KeybindingWidget extends ReactWidget {
         return labelA.toLowerCase().localeCompare(labelB.toLowerCase());
     }
 
+    public triggerEditKeybinding(item: KeybindingItem): void {
+        this.editKeybinding(item)();
+    };
+
+    public triggerResetKeybinding(item: KeybindingItem): void {
+        this.resetKeybinding(item);
+    }
+
     /**
      * Prompt users to update the keybinding for the given command.
      * @param item the keybinding item.
      */
-    protected editKeybinding(item: KeybindingItem): void {
+    protected editKeybinding = (item: KeybindingItem) => () => {
         const command = item.command.id;
         const oldKeybinding = item.keybinding && item.keybinding.keybinding;
         const dialog = new EditKeybindingDialog({
@@ -559,7 +580,7 @@ export class KeybindingWidget extends ReactWidget {
                 }, oldKeybinding);
             }
         });
-    }
+    };
 
     /**
      * Prompt users for confirmation before resetting.
@@ -669,6 +690,15 @@ export class KeybindingWidget extends ReactWidget {
         }
     }
 
+    protected handleContextMenu = (item: KeybindingItem) => (e: React.SyntheticEvent) => {
+        const target = e.nativeEvent.target as HTMLElement;
+        const domRect = target.getBoundingClientRect();
+        this.contextMenuRenderer.render({
+            menuPath: KeymapsMenus.KEYBINDINGS_WIDGET_CONTEXT_MENU,
+            anchor: { x: domRect.left, y: domRect.bottom },
+            args: [this, { id: item.command.id, value: item }]
+        });
+    };
 }
 /**
  * Dialog used to edit keybindings, and reset custom keybindings.
